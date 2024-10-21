@@ -23,6 +23,8 @@
 (define-constant err-invalid-event-type (err u117))
 (define-constant err-invalid-location (err u118))
 (define-constant err-invalid-verification-method (err u119))
+(define-constant err-invalid-participant (err u120))
+(define-constant err-invalid-organizer (err u121))
 
 ;; Data Variables
 (define-data-var next-event-id uint u0)
@@ -285,6 +287,7 @@
   (begin
     (asserts! (is-valid-event-id event-id) err-invalid-event-id)
     (asserts! (is-valid-verification-method verification-method) err-invalid-verification-method)
+    (asserts! (not (is-eq participant tx-sender)) err-invalid-participant)
     (let ((participation (unwrap! (map-get? participations { event-id: event-id, participant: participant }) err-not-eligible)))
       (begin
         (asserts! (or (is-owner) (is-event-organizer event-id tx-sender)) err-owner-only)
@@ -296,7 +299,7 @@
             verification-method: verification-method
           }))
         
-        (update-reputation participant u10)
+        (as-contract (update-reputation participant u10))
         (ok true)))
   )
 )
@@ -318,16 +321,19 @@
 (define-public (add-organizer (event-id uint) (organizer principal))
   (begin
     (asserts! (is-valid-event-id event-id) err-invalid-event-id)
+    (asserts! (not (is-eq organizer tx-sender)) err-invalid-organizer)
     (let ((event (unwrap! (map-get? events { event-id: event-id }) err-event-not-found))
           (current-organizers (default-to { organizers: (list) } (map-get? event-organizers { event-id: event-id }))))
       (begin
         (asserts! (or (is-owner) (is-eq (get creator event) tx-sender)) err-owner-only)
         (asserts! (< (len (get organizers current-organizers)) u5) err-not-eligible)
+        (asserts! (is-none (index-of (get organizers current-organizers) organizer)) err-invalid-organizer)
         
-        (map-set event-organizers { event-id: event-id }
-          { organizers: (unwrap! (as-max-len? (append (get organizers current-organizers) organizer) u5)
-                                err-not-eligible) })
-        (ok true)))
+        (let ((new-organizers (unwrap! (as-max-len? (append (get organizers current-organizers) organizer) u5)
+                                       err-not-eligible)))
+          (map-set event-organizers { event-id: event-id }
+            { organizers: new-organizers })
+          (ok true))))
   )
 )
 
