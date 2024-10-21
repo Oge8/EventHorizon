@@ -7,6 +7,10 @@
 (define-constant err-already-claimed (err u101))
 (define-constant err-event-not-found (err u102))
 (define-constant err-not-eligible (err u103))
+(define-constant err-invalid-event-id (err u104))
+(define-constant err-invalid-date (err u105))
+(define-constant err-invalid-max-participants (err u106))
+(define-constant err-invalid-name (err u107))
 
 ;; Data Maps
 (define-map events 
@@ -32,13 +36,42 @@
   (is-eq tx-sender contract-owner)
 )
 
+(define-private (is-valid-event-id (event-id uint))
+  (< event-id u1000000)
+)
+
+(define-private (is-future-date (date uint))
+  (> date block-height)
+)
+
+(define-private (is-valid-max-participants (max-participants uint))
+  (and (> max-participants u0) (< max-participants u1000000))
+)
+
+(define-private (is-valid-name (name (string-ascii 50)))
+  (and 
+    (not (is-eq name ""))
+    (<= (len name) u50)
+  )
+)
+
 ;; Public Functions
 (define-public (create-event (event-id uint) (name (string-ascii 50)) (date uint) (max-participants uint))
   (begin
     (asserts! (is-owner) err-owner-only)
+    (asserts! (is-valid-event-id event-id) err-invalid-event-id)
+    (asserts! (is-valid-name name) err-invalid-name)
+    (asserts! (is-future-date date) err-invalid-date)
+    (asserts! (is-valid-max-participants max-participants) err-invalid-max-participants)
+    (asserts! (is-none (map-get? events { event-id: event-id })) err-already-claimed)
+    
     (map-set events { event-id: event-id }
-      { name: name, date: date, max-participants: max-participants, current-participants: u0 }
-    )
+      { 
+        name: name, 
+        date: date, 
+        max-participants: max-participants, 
+        current-participants: u0 
+      })
     (ok true)
   )
 )
@@ -49,15 +82,18 @@
     (current-participants (get current-participants event))
     (max-participants (get max-participants event))
   )
+    (asserts! (is-valid-event-id event-id) err-invalid-event-id)
     (asserts! (< current-participants max-participants) err-not-eligible)
     (asserts! (is-none (map-get? participations { event-id: event-id, participant: tx-sender })) err-already-claimed)
+    
+    (map-set events { event-id: event-id }
+      (merge event { current-participants: (+ current-participants u1) })
+    )
     
     (map-set participations { event-id: event-id, participant: tx-sender }
       { claimed: true, timestamp: block-height }
     )
-    (map-set events { event-id: event-id }
-      (merge event { current-participants: (+ current-participants u1) })
-    )
+    
     (mint-nft event-id tx-sender)
   )
 )
@@ -67,10 +103,14 @@
     (participation (unwrap! (map-get? participations { event-id: event-id, participant: tx-sender }) err-not-eligible))
     (user-stat (default-to { total-events: u0, total-rewards: u0 } (map-get? user-stats { user: tx-sender })))
   )
+    (asserts! (is-valid-event-id event-id) err-invalid-event-id)
     (asserts! (get claimed participation) err-not-eligible)
+    
     (map-set user-stats { user: tx-sender }
-      { total-events: (+ (get total-events user-stat) u1), total-rewards: (+ (get total-rewards user-stat) u10) }
-    )
+      { 
+        total-events: (+ (get total-events user-stat) u1), 
+        total-rewards: (+ (get total-rewards user-stat) u10) 
+      })
     (ok true)
   )
 )
