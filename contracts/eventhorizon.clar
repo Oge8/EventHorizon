@@ -25,6 +25,7 @@
 (define-constant err-invalid-verification-method (err u119))
 (define-constant err-invalid-participant (err u120))
 (define-constant err-invalid-organizer (err u121))
+(define-constant err-invalid-is-private (err u122))
 
 ;; Data Variables
 (define-data-var next-event-id uint u0)
@@ -226,6 +227,10 @@
   (< event-id (var-get next-event-id))
 )
 
+(define-private (is-valid-is-private (is-private bool))
+  (or (is-eq is-private true) (is-eq is-private false))
+)
+
 ;; Public Functions
 (define-public (create-event (name (string-ascii 50)) 
                            (date uint) 
@@ -244,6 +249,7 @@
     (asserts! (is-valid-description description) err-invalid-description)
     (asserts! (is-valid-event-type event-type) err-invalid-event-type)
     (asserts! (is-valid-location location) err-invalid-location)
+    (asserts! (is-valid-is-private is-private) err-invalid-is-private)
     
     (let ((event-id (increment-event-id)))
       (map-set events { event-id: event-id }
